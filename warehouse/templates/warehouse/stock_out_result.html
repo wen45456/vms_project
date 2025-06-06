@@ -1,0 +1,49 @@
+{% extends "warehouse/base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>批量出库结果</h2>
+    
+    {% if messages %}
+    <div class="mt-4">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if bulk_errors %}
+    <div class="card mt-4">
+        <div class="card-header bg-danger text-white">
+            错误详情（共{{ bulk_errors|length }}条）
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>物料号</th>
+                            <th>错误描述</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for error in bulk_errors %}
+                        <tr>
+                            <td>{{ error.row }}</td>
+                            <td>{{ error.message }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="mt-4">
+        <a href="{% url 'stock_out_bulk' %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> 返回批量出库
+        </a>
+    </div>
+</div>
+{% endblock %}

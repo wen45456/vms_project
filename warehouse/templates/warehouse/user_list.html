@@ -1,0 +1,57 @@
+{% extends "warehouse/base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between mb-3">
+        <h2>用户管理</h2>
+        <div>
+            {% if user.is_superuser %}  {# 确保每个if都有对应的endif #}
+            <a href="{% url 'user_create' %}" class="btn btn-success mb-3">新建用户</a>
+            {% endif %}  {# 添加闭合标签 #}
+        </div>
+    </div>
+    
+    <form method="get" class="mb-4">
+        <div class="input-group">
+            <input type="text" name="search" class="form-control" 
+                   placeholder="搜索用户..." value="{{ search_query }}">
+            <button type="submit" class="btn btn-primary">搜索</button>
+        </div>
+    </form>
+
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>用户ID</th>
+                <th>用户名</th>
+                <th>权限</th>
+                <th>创建时间</th>
+                <th>最近登录</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user.id }}</td>
+                <td>{{ user.username }}</td>
+                <td>
+                    {% if user.userprofile %}
+                        {{ user.userprofile.get_permissions_display }}
+                    {% else %}
+                        未配置
+                    {% endif %}
+                </td>
+                <td>{{ user.date_joined|date:"Y-m-d H:i" }}</td>
+                <td>{{ user.last_login|date:"Y-m-d H:i" }}</td>
+                <td>
+                    <a href="{% url 'user_edit' user.id %}" class="btn btn-sm btn-warning">编辑</a>
+                    <a href="{% url 'user_delete' user.id %}" class="btn btn-sm btn-danger" 
+                       onclick="return confirm('确定要删除该用户吗？')">删除</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

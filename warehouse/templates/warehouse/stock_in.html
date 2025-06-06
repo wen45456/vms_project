@@ -1,0 +1,214 @@
+{% extends "warehouse/base.html" %}
+{% load static %}
+
+{% block content %}
+<div class="container">
+    <h2>产品入库</h2>
+    {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+<form method="post" id="stockInForm">
+    {% csrf_token %}
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover" id="productTable">
+            <thead class="thead-dark">
+                <tr>
+                    <th>物料号</th>
+                    <th>产品名称</th>
+                    <th>型号</th>
+                    <th>供应商</th>
+                    <th>采购单价</th>
+                    <th>仓库名称</th>
+                    <th>数量</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="product-row">
+                    <td><input type="text" name="material_number" class="form-control" required></td>
+                    <td><input type="text" name="product_name" class="form-control" required></td>
+                    <td><input type="text" name="spec" class="form-control" required></td>
+                    <td><input type="text" name="supplier" class="form-control" required></td>
+                    <td><input type="text" name="purchase_price" class="form-control" pattern="\d+(\.\d{1,2})?" oninput="this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1')" required></td>
+                    <td><input type="text" name="warehouse_name" class="form-control" required></td>
+                    <td><input type="number" name="quantity" class="form-control" min="1" required></td>
+                    <td><button type="button" class="btn btn-success add-row">+</button></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <button type="button" class="btn btn-primary mt-3" onclick="showConfirmation()">提交入库</button>
+</form>
+
+<!-- 新增确认弹窗 -->
+<div class="modal fade" id="confirmationModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">入库确认</h5>
+            </div>
+            <div class="modal-body" id="confirmationContent"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitForm()">确认提交</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // 物料号输入自动填充
+    // 修改所有/api/get_product_by_field/为/api/get_products_by_field/
+    $('input[name="material_number"]').on('change', function() {
+        let $row = $(this).closest('tr');
+        $.getJSON('/api/get_products_by_field/', {field: 'material_number', value: $(this).val()})
+            .done(function(data) {
+                if(data.exists) {
+                    $('input[name="product_name"]').val(data.product.name);
+                    $('input[name="spec"]').val(data.product.spec);
+                    $('input[name="supplier"]').val(data.product.supplier);
+                    $('input[name="purchase_price"]').val(data.product.purchase_price);
+                } else {
+                    $row.find('input').css('border-color', '#ff0000');
+                    $row.find('input').after('<div class="invalid-feedback">该物料号不存在，将创建新产品</div>');
+                }
+            });
+    });
+
+    // 型号输入自动填充
+    $('input[name="spec"]').on('change', function() {
+        $.getJSON('/api/get_products_by_field/', {field: 'spec', value: $(this).val()})
+            .done(function(data) {
+                if(data.exists) {
+                    $('input[name="material_number"]').val(data.product.material_number);
+                    $('input[name="product_name"]').val(data.product.name);
+                    $('input[name="supplier"]').val(data.product.supplier);
+                    $('input[name="purchase_price"]').val(data.product.purchase_price);
+                }
+            });
+    });
+    $('input[name="product_name"]').on('input', _.debounce(function() {
+        $.getJSON('/api/get_products_by_field/', {field: 'name', value: $(this).val()})
+            .done(function(data) {
+                var dropdown = $('#product-name-results').empty();
+                data.results.forEach(function(product) {
+                    dropdown.append($('<option>').val(product.material_number).text(product.spec));
+                });
+            });
+    }, 300));
+    
+    $('input[name="supplier"]').on('input', _.debounce(function() {
+        $.getJSON('/api/get_products_by_field/', {field: 'supplier', value: $(this).val()})
+            .done(function(data) {
+                var dropdown = $('#supplier-results').empty();
+                data.results.forEach(function(product) {
+                    dropdown.append($('<option>').val(product.material_number).text(product.spec));
+                });
+            });
+    }, 300));
+});
+</script>
+<script>
+// 动态添加行
+$(document).on('click', '.add-row', function() {
+    const newRow = $('.product-row:first').clone();
+    newRow.find('input').val('');
+    newRow.find('.add-row').replaceWith('<button type="button" class="btn btn-danger remove-row">-</button>');
+    $('#productTable tbody').append(newRow);
+});
+
+// 删除行
+$(document).on('click', '.remove-row', function() {
+    $(this).closest('tr').remove();
+});
+
+// 优化确认弹窗
+function showConfirmation() {
+    const rows = [];
+    $('#productTable tbody tr').each(function() {
+        const rowData = {
+            material: $(this).find('[name="material_number"]').val(),
+            product: $(this).find('[name="product_name"]').val(),
+            spec: $(this).find('[name="spec"]').val(),
+            supplier: $(this).find('[name="supplier"]').val(),
+            price: $(this).find('[name="purchase_price"]').val(),
+            warehouse: $(this).find('[name="warehouse_name"]').val(),
+            quantity: $(this).find('[name="quantity"]').val()
+        };
+        rows.push(rowData);
+    });
+
+    let content = `<table class="table table-bordered">
+        <thead><tr>
+            <th>物料号</th>
+            <th>产品名称</th>
+            <th>型号</th>
+            <th>供应商</th>
+            <th>采购单价</th>
+            <th>仓库</th>
+            <th>数量</th>
+        </tr></thead><tbody>`;
+
+    rows.forEach(row => {
+        content += `<tr>
+            <td>${row.material}</td>
+            <td>${row.product}</td>
+            <td>${row.spec}</td>
+            <td>${row.supplier}</td>
+            <td>¥${row.price}</td>
+            <td>${row.warehouse}</td>
+            <td>${row.quantity}</td>
+        </tr>`;
+    });
+
+    content += '</tbody></table>';
+    $('#confirmationContent').html(content);
+    $('#confirmationModal').modal('show');
+}
+</script>
+<script>
+function submitForm() {
+    // 添加加载状态提示
+    $('#confirmationModal').modal('hide');
+    $('#stockInForm').submit();
+}
+</script>
+<script>
+// 通用自动填充处理函数
+function handleAutoFill($row, field, value) {
+    $.getJSON('/api/get_products_by_field/', {field: field, value: value})
+        .done(function(data) {
+            if(data.exists) {
+                $row.find('[name="material_number"]').val(data.product.material_number);
+                $row.find('[name="product_name"]').val(data.product.name);
+                $row.find('[name="spec"]').val(data.product.spec);
+                $row.find('[name="supplier"]').val(data.product.supplier);
+                $row.find('[name="purchase_price"]').val(data.product.purchase_price);
+                $row.find('[name="warehouse_name"]').val(data.product.warehouse); // 新增仓库自动填充
+            } else if(field === 'material_number') {
+                $row.find('input').css('border-color', '#ff0000');
+                $row.find('input').after('<div class="invalid-feedback">该物料号不存在，将创建新产品</div>');
+            }
+        });
+}
+
+// 动态行事件绑定（使用事件委托）
+$(document).on('change', '[name="material_number"]', function() {
+    handleAutoFill($(this).closest('tr'), 'material_number', $(this).val());
+});
+
+$(document).on('change', '[name="spec"]', function() {
+    handleAutoFill($(this).closest('tr'), 'spec', $(this).val());
+});
+</script>
+<!-- 修改为库存导入专用模板 -->
+<a href="{% url 'stock_import' %}" class="btn btn-info">
+    <i class="bi bi-upload me-2"></i>Excel批量入库
+</a>
+<a href="{% url 'stock_import_template' %}" class="btn btn-outline-secondary ms-2">
+    <i class="bi bi-file-earmark-arrow-down me-2"></i>下载入库模板
+</a>
+</div>
+</div>
+{% endblock %}

@@ -1,0 +1,312 @@
+{% extends "warehouse/base.html" %}
+{% load tz %}
+{% block content %}
+<div class="container-fluid px-4">
+    <div class="sticky-header bg-white py-3">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">库存查询</h2>
+            <form class="compact-form">
+                <div class="input-group">
+                    <select name="field" class="form-select">
+                        <option value="all" {% if search_field == 'all' %}selected{% endif %}>全部字段</option>
+                        <option value="material_number" {% if search_field == 'material_number' %}selected{% endif %}>物料号</option>
+                        <option value="name" {% if search_field == 'name' %}selected{% endif %}>产品名称</option>
+                        <option value="spec" {% if search_field == 'spec' %}selected{% endif %}>型号</option>
+                        <option value="supplier" {% if search_field == 'supplier' %}selected{% endif %}>供应商</option>
+                    </select>
+                    <input type="text" 
+                           name="search" 
+                           class="form-control" 
+                           placeholder="输入搜索关键词..."
+                           value="{{ search_query }}">
+                    <button type="submit" class="btn btn-primary">搜索</button>
+                </div>
+                <!-- 添加隐藏字段保持分页参数 -->
+                {% if request.GET.page %}
+                    <input type="hidden" name="page" value="{{ request.GET.page }}">
+                {% endif %}
+            </form>
+        </div>
+
+        <div class="d-flex gap-2 mb-3">
+            <button class="btn btn-primary" onclick="addToPrintQueue()">
+                <i class="bi bi-printer me-2"></i>加入打印队列
+            </button>
+        </div>
+    </div>
+
+    <div class="table-responsive rounded-3 border">
+        <table class="table table-hover table-fixed-layout mb-0">
+            <thead>
+                <tr>
+                    <th><!-- 复选框标题 --></th>
+                    <th>物料号</th>
+                    <th>产品名称</th>
+                    <th>产品型号</th>
+                    <th>供应商</th>
+                    <th>采购单价</th>
+                    <th>销售单价</th>
+                    <th>仓库</th>
+                    <th>数量</th>
+                    <th>最后更新</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for inventory in inventories %}
+                <tr data-item="{{ inventory.id }}">
+                    <td>
+                        <input type="checkbox" 
+                               class="select-item" 
+                               value="{{ inventory.id }}">
+                    </td>
+                    <td>{{ inventory.product.material_number }}</td>
+                    <td>{{ inventory.product.name }}</td>
+                    <td>{{ inventory.product.spec }}</td>
+                    <td>{{ inventory.product.supplier }}</td>
+                    <td>{{ inventory.product.purchase_price|floatformat:2 }}</td>
+                    <td class="text-success">{{ inventory.product.sale_price|floatformat:2 }}</td>
+                    <td>{{ inventory.warehouse.name }}</td>
+                    <td class="fw-bold">{{ inventory.quantity }}</td>
+                    <td>{{ inventory.last_updated|date:'Y-m-d H:i' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {# 添加分页导航 #}
+    <div class="pagination mt-4">
+        <span class="step-links">
+            {% if inventories.has_previous %}
+                <a href="?page=1&search={{ search_query }}&field={{ search_field }}" class="btn btn-sm btn-outline-secondary">&laquo; 首页</a>
+                <a href="?page={{ inventories.previous_page_number }}&search={{ search_query }}&field={{ search_field }}" class="btn btn-sm btn-outline-secondary">上一页</a>
+            {% endif %}
+
+            <span class="current">
+                第 {{ inventories.number }} 页 / 共 {{ paginator.num_pages }} 页
+            </span>
+
+            {% if inventories.has_next %}
+                <a href="?page={{ inventories.next_page_number }}&search={{ search_query }}&field={{ search_field }}" class="btn btn-sm btn-outline-secondary">下一页</a>
+                <a href="?page={{ paginator.num_pages }}&search={{ search_query }}&field={{ search_field }}" class="btn btn-sm btn-outline-secondary">末页 &raquo;</a>
+            {% endif %}
+        </span>
+    </div>
+</div>  {# 补充分页导航的容器闭合标签 #}
+
+<div class="mt-4 card" id="printQueueSection">
+    <div class="card-body">
+        <h4>打印队列</h4>
+        <table class="table table-bordered" id="printQueue">
+            <thead class="table-dark">
+                <tr>
+                    <th><input type="checkbox" id="selectAllPrintItems"></th>
+                    <th>物料号</th>
+                    <th>产品名称</th>
+                    <th>型号</th>
+                    <th>数量</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+        <button class="btn btn-success mt-2" onclick="showPrintConfirmation()">确认打印</button>
+        <button class="btn btn-danger mt-2 ms-2" onclick="clearPrintQueue()">清空队列</button>
+    </div>
+</div>
+
+<!-- 打印确认弹窗 -->
+<div class="modal fade" id="printConfirmModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">库存查询打印确认</h5>
+            </div>
+            <div class="modal-body" id="printConfirmContent"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="performPrint()">开始打印</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function exportSelected() {
+    const selected = Array.from(document.querySelectorAll('.select-item:checked'))
+        .map(checkbox => checkbox.value);
+    
+    if(selected.length === 0) {
+        alert('请先选择要导出的项目');
+        return;
+    }
+    
+    const params = new URLSearchParams();
+    params.append('ids', selected.join(','));
+    window.location = '{% url "export_inventory" %}?' + params.toString();
+}
+
+// 使用sessionStorage保存打印队列
+let printQueue = JSON.parse(sessionStorage.getItem('printQueue') || '[]');
+
+function addToPrintQueue() {
+    const selectedItems = Array.from(document.querySelectorAll('.select-item:checked'))
+        .map(checkbox => {
+            const row = checkbox.closest('tr');
+            return {
+                id: checkbox.value,
+                material: row.cells[1].textContent.trim(),
+                name: row.cells[2].textContent.trim(),
+                spec: row.cells[3].textContent.trim(),
+                quantity: row.cells[8].textContent.trim(),
+                warehouse: row.cells[7].textContent.trim() // 新增仓库信息
+            };
+        });
+
+    if (selectedItems.length === 0) {
+        alert('请先选择要打印的项目');
+        return;
+    }
+
+    printQueue = [...printQueue, ...selectedItems];
+    sessionStorage.setItem('printQueue', JSON.stringify(printQueue));
+    updatePrintQueueUI();
+    document.getElementById('printQueueSection').style.display = 'block';
+}
+
+// 新增队列更新函数
+function updatePrintQueueUI() {
+    const tbody = document.querySelector('#printQueue tbody');
+    tbody.innerHTML = printQueue.map((item, index) => `
+        <tr data-index="${index}">
+            <td><input type="checkbox" checked></td>
+            <td>${item.material}</td>
+            <td>${item.name}</td>
+            <td>${item.spec}</td>
+            <td>${item.quantity}</td>
+            <td>
+                <button class="btn btn-sm btn-danger" 
+                        onclick="removeFromQueue(${index})">移除</button>
+            </td>
+        </tr>
+    `).join('');
+    
+    // 新增：每次更新UI后同步到sessionStorage
+    sessionStorage.setItem('printQueue', JSON.stringify(printQueue));
+}
+
+// 修改打印内容生成逻辑
+function showPrintConfirmation() {
+    const selected = Array.from(document.querySelectorAll('#printQueue tbody input[type="checkbox"]:checked'))
+        .map(checkbox => checkbox.closest('tr').dataset.index);
+    
+    if(selected.length === 0) {
+        alert('请先选择要打印的项目');
+        return;
+    }
+    
+    const printItems = selected.map(index => printQueue[index]);
+    const content = `
+        <p>共选择 ${selected.length} 个项目</p>
+        <p>点击"开始打印"按钮继续</p>
+    `;
+    
+    document.getElementById('printConfirmContent').innerHTML = content;
+    $('#printConfirmModal').modal('show');
+}
+
+function performPrint() {
+    const selected = Array.from(document.querySelectorAll('#printQueue tbody input[type="checkbox"]:checked'))
+        .map(checkbox => checkbox.closest('tr').dataset.index);
+    
+    const printItems = selected.map(index => printQueue[index]);
+    
+    const params = new URLSearchParams({
+        ids: printItems.map(item => item.id).join(',')
+    });
+    
+    fetch(`/warehouse/get_print_data/?${params}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('网络响应异常');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if(data.length === 0) {  // 新增空数据检查
+                alert('没有选择要打印的项目');
+                return;
+            }
+            // 创建打印内容
+            const printContent = `
+                <h3>库存清单 ${new Date().toLocaleDateString()}</h3>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>物料号</th>
+                            <th>产品名称</th>
+                            <th>型号</th>
+                            <th>仓库</th>
+                            <th>数量</th>
+                            <th>采购价</th>
+                            <th>销售价</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(item => `
+                            <tr>
+                                <td>${item.material_number}</td>
+                                <td>${item.name}</td>
+                                <td>${item.spec}</td>
+                                <td>${item.warehouse}</td>  <!-- 确保显示仓库 -->
+                                <td>${item.quantity}</td>
+                                <td>${item.purchase_price}</td>
+                                <td>${item.sale_price}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            // 创建打印窗口
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                    <head>
+                        <title>库存打印</title>
+                        <link rel="stylesheet" href="/static/css/bootstrap.min.css">  <!-- 修正路径 -->
+                    </head>
+                    <body class="container mt-4">
+                        ${printContent}
+                        <script>
+                            window.onload = function() { window.print(); }
+                        <\/script>
+                    </body>
+                </html>
+            `);
+            printWindow.document.close();
+        })
+        .catch(error => {
+            alert('打印失败: ' + error.message);  // 添加错误处理
+        });
+    
+    $('#printConfirmModal').modal('hide');
+}
+
+// 专用移除函数
+function removeFromQueue(index) {
+    printQueue.splice(index, 1);
+    updatePrintQueueUI();
+    if(printQueue.length === 0) {
+        document.getElementById('printQueueSection').style.display = 'none';
+    }
+}
+
+function clearPrintQueue() {
+    printQueue = [];
+    sessionStorage.removeItem('printQueue');  // 新增清空存储
+    updatePrintQueueUI();
+    document.getElementById('printQueueSection').style.display = 'none';
+}
+</script>
+{% endblock %}

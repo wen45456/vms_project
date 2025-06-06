@@ -1,0 +1,35 @@
+{% extends "warehouse/base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>产品信息批量导入</h2>
+    
+    <div class="card">
+        <div class="card-header">产品导入</div>
+        <div class="card-body">
+            <p class="text-muted mb-3">
+                <strong>产品模板必须包含以下5列：</strong><br>
+                1. 物料号（必填且不能有空格）<br>
+                2. 产品名称（必填）<br>
+                3. 型号（必填）<br>
+                4. 供应商（必填）<br>
+                5. 采购单价（必填）
+            </p>
+            <div class="alert alert-warning">
+                注意：请勿使用入库管理模块的模板，入库模板包含额外列（仓库名称、数量）
+            </div>
+            <a href="{% url 'product_import_template' %}" class="btn btn-info mb-3">下载导入模板</a>
+            <form method="post" enctype="multipart/form-data" action="{% url 'import' %}">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label>选择Excel文件：</label>
+                    <input type="file" name="excel_file" accept=".xlsx" required>
+                </div>
+                <button type="submit" name="excel_submit" class="btn btn-success">上传Excel</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 删除CSV专用的确认弹窗 -->
+{% endblock %}

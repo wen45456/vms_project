@@ -1,0 +1,10 @@
+{% extends "warehouse/base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="alert alert-success">
+        您已成功退出系统
+    </div>
+    <a href="{% url 'login' %}" class="btn btn-primary">重新登录</a>
+</div>
+{% endblock %}

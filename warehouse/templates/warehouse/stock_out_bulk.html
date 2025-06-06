@@ -1,0 +1,58 @@
+{% extends "warehouse/base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>批量出库</h2>
+    
+    <div class="card mt-4">
+        <div class="card-header bg-info text-white">Excel批量出库</div>
+        <div class="card-body">
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label>选择出库文件：</label>
+                    <input type="file" name="excel_file" accept=".xlsx" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-success mt-3">上传并处理</button>
+            </form>
+        </div>
+    </div>
+    
+    {% if messages %}
+    <div class="mt-4">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- 添加错误详情表格 -->
+    {% if bulk_errors %}
+    <div class="card mt-4">
+        <div class="card-header bg-danger text-white">错误详情（共{{ bulk_errors|length }}条）</div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>行号</th>
+                            <th>错误类型</th>
+                            <th>详细描述</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for error in bulk_errors %}
+                        <tr>
+                            <td>{{ error.row }}</td>
+                            <td>数据校验失败</td>
+                            <td>{{ error.message }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

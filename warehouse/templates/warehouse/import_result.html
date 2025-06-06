@@ -1,0 +1,56 @@
+{% extends "warehouse/base.html" %}
+
+{% block content %}
+<div class="container">
+    <h2>导入结果</h2>
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+
+    <div class="card mt-4">
+        <div class="card-header bg-success text-white">导入统计</div>
+        <div class="card-body">
+            <p class="mb-2">总处理记录：{{ success_count|add:import_errors|length }}</p>
+            <p class="mb-0">成功记录：<span class="text-success">{{ success_count }}</span></p>
+            <p class="mb-0">失败记录：<span class="text-danger">{{ import_errors|length }}</span></p>
+        </div>
+    </div>
+
+    {% if import_errors %}
+    <div class="card mt-4">
+        <div class="card-header bg-info text-white">导入统计</div>
+        <div class="card-body">
+            <p>成功记录：{{ success_count }}</p>
+            <p>失败记录：{{ errors|length }}</p>
+        </div>
+    </div>
+    <div class="card mt-4">
+        <div class="card-header bg-danger text-white">错误详情（共{{ errors|length }}条）</div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>行号</th>
+                            <th>错误类型</th>
+                            <th>详细描述</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for error in import_errors %}
+                        <tr>
+                            <td>{{ error.row }}</td>
+                            <td>{{ error.type }}</td>
+                            <td>{{ error.message }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <a href="{% url 'import' %}" class="btn btn-secondary mt-4">返回导入页面</a>
+</div>
+{% endblock %}

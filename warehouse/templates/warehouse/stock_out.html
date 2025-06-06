@@ -1,0 +1,245 @@
+{% extends "warehouse/base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="text-end mb-3">
+        <a href="{% url 'stock_out_template' %}" class="btn btn-info">
+            <i class="bi bi-download"></i> 下载批量模板
+        </a>
+        <a href="{% url 'stock_out_bulk' %}" class="btn btn-secondary">
+            <i class="bi bi-upload"></i> 批量出库
+        </a>
+    </div>
+    <h2>出库管理</h2>
+    {% if error %}
+    <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+    <form method="post" id="outForm">
+        {% csrf_token %}
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover" id="productTable">
+                <thead class="thead-dark">
+                    <tr>
+                        <th>物料号</th>
+                        <th>产品名称</th>
+                        <th>型号</th>
+                        <th>供应商</th>
+                        <th>仓库</th>
+                        <th>销售单价</th>
+                        <th>数量</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="product-row">
+                        <td><input type="text" name="material_number" class="form-control" required></td>
+                        <td><input type="text" name="product_name" class="form-control" required readonly></td>
+                        <td><input type="text" name="spec" class="form-control" required></td>
+                        <td>
+                            <select name="supplier" class="form-select" required>
+                                <option value="">请选择</option>
+                                {% for supplier in suppliers %}
+                                <option value="{{ supplier }}">{{ supplier }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td>
+                            <select name="warehouse" class="form-select" required>
+                                {% for warehouse in warehouses %}
+                                <option value="{{ warehouse.id }}">{{ warehouse.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td><input type="text" name="sale_price" class="form-control" required></td>
+                        <td><input type="number" name="quantity" class="form-control" min="1" required></td>
+                        <td><button type="button" class="btn btn-success add-row">+</button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="text-center mt-4">
+            <button type="button" class="btn btn-primary" onclick="showConfirm()">
+                确认出库
+            </button>
+        </div>
+    </form>
+    
+    <!-- 新增确认弹窗 -->
+    <div class="modal fade" id="confirmModal">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title">出库确认</h5>
+                </div>
+                <div class="modal-body" id="confirmContent"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" 
+                            data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" 
+                            onclick="submitForm()">确认</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+    $(document).ready(function() {
+        $('input[name="material_number"]').on('change', function() {
+            $.getJSON('/api/get_products_by_field/', {
+                field: 'material_number',
+                value: $(this).val()
+            }).done(function(data) {
+                if(data.exists) {
+                    $('input[name="product_name"]').val(data.product.name);
+                    $('input[name="spec"]').val(data.product.spec);
+                    $('input[name="supplier"]').val(data.product.supplier);
+                    $('input[name="warehouse"]').val(data.product.warehouse);
+                }
+            });
+        });
+
+        $('input[name="spec"]').on('change', function() {
+            $.getJSON('/api/get_products_by_field/', {
+                field: 'spec',
+                value: $(this).val()
+            }).done(function(data) {
+                if(data.exists) {
+                    $('input[name="material_number"]').val(data.product.material_number);
+                    $('input[name="product_name"]').val(data.product.name);
+                    $('input[name="supplier"]').val(data.product.supplier);
+                    $('input[name="warehouse"]').val(data.product.warehouse);
+                }
+            });
+        });
+
+        $('input[name="product_name"]').on('input', _.debounce(function() {
+            $.getJSON('/api/get_products_by_field/', {
+                field: 'name',
+                value: $(this).val()
+            }).done(function(data) {
+                var dropdown = $('#product-results').empty();
+                data.results.forEach(function(product) {
+                    dropdown.append($('<option>').val(product.material_number).text(product.spec));
+                });
+            });
+        }, 300));
+
+        $('input[name="supplier"]').on('input', _.debounce(function() {
+            $.getJSON('/api/get_products_by_field/', {
+                field: field,
+                value: $(this).val()
+            }).done(function(data) {
+                if(data.exists) {
+                    $('input[name="product_name"]').val(data.product.name);
+                    $('input[name="spec"]').val(data.product.spec);
+                    $('select[name="supplier"]').val(data.product.supplier); // 修正为select元素
+                    $('select[name="warehouse"]').val(data.product.warehouse); // 显示仓库名称
+                }
+            });
+        }, 300));
+    });
+
+    function showConfirm() {
+        const formData = new FormData(document.getElementById('outForm'));
+        // 新增字段验证
+        const quantity = parseInt(formData.get('quantity'));
+        const salePrice = parseFloat(formData.get('sale_price'));
+
+        if (quantity <= 0) {
+            alert('出库数量必须大于0');
+            return;
+        }
+
+        $.getJSON('/api/get_products_by_field/', {
+            field: 'material_number',
+            value: formData.get('material_number')
+        }).done(function(data) {
+            // 新增后端数据验证
+            if(data.product) {
+                if (quantity > data.product.quantity) {
+                    alert('错误：出库数量超过库存数量');
+                    return;
+                }
+                if (salePrice <= parseFloat(data.product.purchase_price)) {
+                    alert('错误：销售单价必须大于采购单价');
+                    return;
+                }
+            }
+            let content = `
+                <p>物料号：${formData.get('material_number')}</p>
+                <p>产品名称：${formData.get('product_name')}</p>
+                <p>型号：${formData.get('spec')}</p>
+                <p>供应商：${formData.get('supplier')}</p>
+                <p>仓库：${$('select[name="warehouse"] option:selected').text()}</p>
+                <p>数量：${formData.get('quantity')}</p>
+                <p>采购单价：${data.product.purchase_price}元</p>
+                <p>销售单价：${formData.get('sale_price')}元</p>
+            `;
+            document.getElementById('confirmContent').innerHTML = content;
+            new bootstrap.Modal(document.getElementById('confirmModal')).show();
+        });
+    }
+    
+    function submitForm() {
+        document.getElementById('outForm').submit();
+        // 添加页面刷新
+        setTimeout(function() {
+            location.reload(true); // 强制从服务器重新加载
+        }, 1000);
+    }
+    </script>
+    <!-- 添加动态行脚本 -->  
+    <script>
+$(document).on('change', '[name="material_number"]', function() {
+    let $row = $(this).closest('tr');
+    $.getJSON('/api/get_products_by_field/', {
+        field: 'material_number',
+        value: $(this).val()
+    }).done(function(data) {
+        if(data.exists) {
+            $row.find('[name="product_name"]').val(data.product.name);
+            $row.find('[name="spec"]').val(data.product.spec);
+            $row.find('[name="supplier"]').val(data.product.supplier);
+            $row.find('[name="warehouse"]').val(data.product.warehouse_id);
+        }
+    });
+});
+$(document).on('change', '[name="spec"]', function() {
+    let $row = $(this).closest('tr');
+    $.getJSON('/api/get_products_by_field/', {
+        field: 'spec',
+        value: $(this).val()
+    }).done(function(data) {
+        if(data.exists) {
+            $row.find('[name="material_number"]').val(data.product.material_number);
+            $row.find('[name="product_name"]').val(data.product.name);
+            $row.find('[name="supplier"]').val(data.product.supplier);
+            function handleAutoFill($row, field, value) {
+                $.getJSON('/api/get_products_by_field/', {field: field, value: value})
+                    .done(function(data) {
+                        if(data.exists) {
+                            $row.find('[name="product_name"]').val(data.product.name);
+                            $row.find('[name="spec"]').val(data.product.spec);
+                            $row.find('[name="supplier"]').val(data.product.supplier);
+                            // 修正仓库选择逻辑
+                            $row.find('select[name="warehouse"]').val(data.product.warehouse.id);
+                        }
+                    });
+            }
+        }
+    });
+});
+$(document).on('click', '.add-row', function() {
+    const newRow = $('.product-row:first').clone();
+    newRow.find('input').val('');
+    newRow.find('.add-row').replaceWith('<button type="button" class="btn btn-danger remove-row">-</button>');
+    $('#productTable tbody').append(newRow);
+});
+
+$(document).on('click', '.remove-row', function() {
+    $(this).closest('tr').remove();
+});
+</script>
+</div>
+{% endblock %}
